@@ -26,13 +26,6 @@
 # In[1]:
 
 
-# can comment out after executing
-get_ipython().system('unzip processed_celeba_small.zip')
-
-
-# In[1]:
-
-
 data_dir = 'processed_celeba_small/'
 
 """
@@ -106,11 +99,11 @@ def get_dataloader(batch_size, image_size, data_dir='processed_celeba_small/'):
 # * You can decide on any reasonable `batch_size` parameter
 # * Your `image_size` **must be** `32`. Resizing the data to a smaller size will make for faster training, while still creating convincing images of faces!
 
-# In[126]:
+# In[4]:
 
 
 # Define function hyperparameters
-batch_size = 128
+batch_size = 32
 img_size = 32
 
 """
@@ -124,7 +117,7 @@ celeba_train_loader = get_dataloader(batch_size, img_size)
 # 
 # Note: You'll need to convert the Tensor images into a NumPy type and transpose the dimensions to correctly display an image, suggested `imshow` code is below, but it may not be perfect.
 
-# In[127]:
+# In[5]:
 
 
 # helper display function
@@ -151,7 +144,7 @@ for idx in np.arange(plot_size):
 # 
 # You need to do a bit of pre-processing; you know that the output of a `tanh` activated generator will contain pixel values in a range from -1 to 1, and so, we need to rescale our training images to a range of -1 to 1. (Right now, they are in a range from 0-1.)
 
-# In[128]:
+# In[6]:
 
 
 # TODO: Complete the scale function
@@ -167,7 +160,7 @@ def scale(x, feature_range=(-1, 1)):
     return x
 
 
-# In[129]:
+# In[7]:
 
 
 """
@@ -196,14 +189,14 @@ print('Max: ', scaled_img.max())
 # * The output should be a single value that will indicate whether a given image is real or fake
 # 
 
-# In[130]:
+# In[8]:
 
 
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-# In[133]:
+# In[9]:
 
 
 def conv(in_channels, out_channels, kernel_size=4, stride=2, padding=1, batch_norm=True):
@@ -223,7 +216,7 @@ def conv(in_channels, out_channels, kernel_size=4, stride=2, padding=1, batch_no
     return nn.Sequential(*layers)
 
 
-# In[176]:
+# In[10]:
 
 
 class Discriminator(nn.Module):
@@ -244,22 +237,25 @@ class Discriminator(nn.Module):
         
         # 8x8 out
         self.conv3a = conv(conv_dim*2, conv_dim*4, 4, stride=2)
-        self.conv3b = conv(conv_dim*4, conv_dim*4, 3, stride=1, padding=1)
-        
-        # 4x4 out
-  
-        
+        self.conv3b = conv(conv_dim*4, conv_dim*4, 3, stride=1, padding=1, batch_norm=False)
         
         # final, fully-connected layer
         self.fc = nn.Linear(conv_dim*4*4*4, 1)
+        
+        self.dropout = nn.Dropout(p=0.2)
 
     def forward(self, x):
         # all hidden layers + leaky relu activation
         out = F.leaky_relu(self.conv1a(x), 0.2)
+        out = self.dropout(out)
         out = F.leaky_relu(self.conv1b(out), 0.2)
+        out = self.dropout(out)
         out = F.leaky_relu(self.conv2a(out), 0.2)
+        out = self.dropout(out)
         out = F.leaky_relu(self.conv2b(out), 0.2)
+        out = self.dropout(out)
         out = F.leaky_relu(self.conv3a(out), 0.2)
+        #out = self.dropout(out)
         out = F.leaky_relu(self.conv3b(out), 0.2)
         
         # flatten
@@ -283,7 +279,7 @@ tests.test_discriminator(Discriminator)
 # * The inputs to the generator are vectors of some length `z_size`
 # * The output should be a image of shape `32x32x3`
 
-# In[136]:
+# In[11]:
 
 
 def deconv(in_channels, out_channels, kernel_size, stride=2, padding=1, batch_norm=True):
@@ -303,7 +299,7 @@ def deconv(in_channels, out_channels, kernel_size, stride=2, padding=1, batch_no
     return nn.Sequential(*layers)
 
 
-# In[205]:
+# In[12]:
 
 
 class Generator(nn.Module):
@@ -319,19 +315,25 @@ class Generator(nn.Module):
         self.conv_dim = conv_dim
         
         self.fc = nn.Linear(z_size, conv_dim*16*1*1)
-        self.t_conv1 = deconv(conv_dim*16, conv_dim*8, 4)
+        self.t_conv1 = deconv(conv_dim*16, conv_dim*8, 4, batch_norm=False)
         self.t_conv2 = deconv(conv_dim*8, conv_dim*4, 4)
         self.t_conv3 = deconv(conv_dim*4, conv_dim*2, 4)
         self.t_conv4 = deconv(conv_dim*2, conv_dim, 4)
         self.t_conv5 = deconv(conv_dim, 3, 4, batch_norm=False)
+        
+        self.dropout = nn.Dropout(p=0.2)
 
     def forward(self, x):
         out = self.fc(x)
         out = out.view(-1, self.conv_dim*16, 1, 1)
         out = F.relu(self.t_conv1(out))
+        out = self.dropout(out)
         out = F.relu(self.t_conv2(out))
+        out = self.dropout(out)
         out = F.relu(self.t_conv3(out))
-        out = F.relu(self.t_conv4(out)) 
+        out = self.dropout(out)
+        out = F.relu(self.t_conv4(out))
+        #out = self.dropout(out)
         out = self.t_conv5(out)
         x = torch.tanh(out)
         return x
@@ -357,7 +359,7 @@ tests.test_generator(Generator)
 # * Initialize the weights to a normal distribution, centered around 0, with a standard deviation of 0.02.
 # * The bias terms, if they exist, may be left alone or set to 0.
 
-# In[206]:
+# In[13]:
 
 
 def weights_init_normal(m):
@@ -385,7 +387,7 @@ def weights_init_normal(m):
 # 
 # Define your models' hyperparameters and instantiate the discriminator and generator from the classes defined above. Make sure you've passed in the correct input arguments.
 
-# In[207]:
+# In[14]:
 
 
 """
@@ -409,7 +411,7 @@ def build_network(d_conv_dim, g_conv_dim, z_size):
 
 # #### Exercise: Define model hyperparameters
 
-# In[210]:
+# In[15]:
 
 
 # Define model hyperparams
@@ -432,7 +434,7 @@ D, G = build_network(d_conv_dim, g_conv_dim, z_size)
 # 
 # Are moved to GPU, where appropriate.
 
-# In[211]:
+# In[16]:
 
 
 """
@@ -467,7 +469,7 @@ else:
 # 
 # **You may choose to use either cross entropy or a least squares error loss to complete the following `real_loss` and `fake_loss` functions.**
 
-# In[212]:
+# In[17]:
 
 
 def real_loss(D_out, smooth=True):
@@ -504,13 +506,13 @@ def fake_loss(D_out):
 # 
 # Define optimizers for your models with appropriate hyperparameters.
 
-# In[213]:
+# In[18]:
 
 
 import torch.optim as optim
 
-lr = 0.0002
-beta1=0.5
+lr = 0.0005
+beta1=0.2
 beta2=0.999 # default value
 
 # Create optimizers for the discriminator and generator
@@ -535,17 +537,13 @@ g_optimizer = optim.Adam(G.parameters(), lr, [beta1, beta2])
 # 
 # Keep in mind that, if you've moved your models to GPU, you'll also have to move any model inputs to GPU.
 
-# In[214]:
+# In[21]:
 
 
-fixed_z = np.random.uniform(-1, 1, size=(16, 100))
-fixed_z.shape
+D.load_state_dict(torch.load('D_FaceGen2.pth'))
+G.load_state_dict(torch.load('G_FaceGen2.pth'))
 
-
-# In[215]:
-
-
-def train(D, G, n_epochs, print_every=200):
+def train(D, G, n_epochs, print_every=500):
     '''Trains adversarial networks for some number of epochs
        param, D: the discriminator network
        param, G: the generator network
@@ -558,6 +556,7 @@ def train(D, G, n_epochs, print_every=200):
         D.cuda()
         G.cuda()
 
+    save_every = 5
     # keep track of loss and generated, "fake" samples
     samples = []
     losses = []
@@ -646,12 +645,13 @@ def train(D, G, n_epochs, print_every=200):
         samples.append(samples_z)
         G.train() # back to training mode
 
+        if epoch % save_every == 0:
+            torch.save(D.state_dict(), 'D_FaceGen2.pth')
+            torch.save(G.state_dict(), 'G_FaceGen2.pth')
+            
     # Save training generator samples
     with open('train_samples.pkl', 'wb') as f:
         pkl.dump(samples, f)
-    
-    torch.save(D.state_dict(), 'D_FaceGen.pth')
-    torch.save(G.state_dict(), 'G_FaceGen.pth')
     
     # finally return losses
     return losses
@@ -659,11 +659,11 @@ def train(D, G, n_epochs, print_every=200):
 
 # Set your number of training epochs and train your GAN!
 
-# In[216]:
+# In[22]:
 
 
 # set number of epochs 
-n_epochs = 20
+n_epochs = 10
 
 
 """
@@ -677,7 +677,7 @@ losses = train(D, G, n_epochs=n_epochs)
 # 
 # Plot the training losses for the generator and discriminator, recorded after each epoch.
 
-# In[217]:
+# In[23]:
 
 
 fig, ax = plt.subplots()
@@ -692,7 +692,7 @@ plt.legend()
 # 
 # View samples of images from the generator, and answer a question about the strengths and weaknesses of your trained models.
 
-# In[218]:
+# In[24]:
 
 
 # helper function for viewing a list of passed in sample images
@@ -707,7 +707,7 @@ def view_samples(epoch, samples):
         im = ax.imshow(img.reshape((32,32,3)))
 
 
-# In[219]:
+# In[25]:
 
 
 # Load samples from generator, taken while training
@@ -715,7 +715,7 @@ with open('train_samples.pkl', 'rb') as f:
     samples = pkl.load(f)
 
 
-# In[220]:
+# In[26]:
 
 
 _ = view_samples(-1, samples)
